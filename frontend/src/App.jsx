@@ -4,9 +4,11 @@ function App() {
   const [mode, setMode] = useState('url') // 'url' ou 'text'
   const [url, setUrl] = useState('')
   const [text, setText] = useState('')
+  const [saveScreenshot, setSaveScreenshot] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [results, setResults] = useState(null)
+  const [screenshot, setScreenshot] = useState(null)
 
   const validateUrl = (urlString) => {
     try {
@@ -38,11 +40,12 @@ function App() {
     setLoading(true)
     setError(null)
     setResults(null)
+    setScreenshot(null)
 
     try {
       const endpoint = mode === 'url' ? '/api/analyze-url' : '/api/analyze'
       const body = mode === 'url' 
-        ? { url: url.trim() }
+        ? { url: url.trim(), saveScreenshot }
         : { text: text.trim() }
 
       const response = await fetch(`http://localhost:3001${endpoint}`, {
@@ -60,6 +63,9 @@ function App() {
 
       const data = await response.json()
       setResults(data.data)
+      if (data.screenshot) {
+        setScreenshot(data.screenshot)
+      }
     } catch (err) {
       setError(err.message || 'Erro ao conectar com o backend')
     } finally {
@@ -71,6 +77,17 @@ function App() {
     if (e.key === 'Enter' && !loading && e.ctrlKey) {
       handleAnalyze()
     }
+  }
+
+  const downloadScreenshot = () => {
+    if (!screenshot) return
+    
+    const link = document.createElement('a')
+    link.href = screenshot
+    link.download = `screenshot-${url.replace(/[^a-z0-9]/gi, '-')}-${Date.now()}.png`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
   }
 
   return (
@@ -91,6 +108,7 @@ function App() {
                   onClick={() => {
                     setMode('url')
                     setError(null)
+                    setScreenshot(null)
                   }}
                   className={`px-4 py-2 rounded-md font-medium transition duration-200 ${
                     mode === 'url'
@@ -104,6 +122,8 @@ function App() {
                   onClick={() => {
                     setMode('text')
                     setError(null)
+                    setScreenshot(null)
+                    setSaveScreenshot(false)
                   }}
                   className={`px-4 py-2 rounded-md font-medium transition duration-200 ${
                     mode === 'text'
@@ -123,7 +143,7 @@ function App() {
                   <p className="text-xs text-gray-500 mb-2">
                     Digite a URL do site para fazer screenshot e análise
                   </p>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 mb-3">
                     <input
                       id="url"
                       type="text"
@@ -144,6 +164,19 @@ function App() {
                     >
                       {loading ? 'Analisando...' : 'Analisar'}
                     </button>
+                  </div>
+                  <div className="flex items-center">
+                    <input
+                      id="saveScreenshot"
+                      type="checkbox"
+                      checked={saveScreenshot}
+                      onChange={(e) => setSaveScreenshot(e.target.checked)}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                      disabled={loading}
+                    />
+                    <label htmlFor="saveScreenshot" className="ml-2 text-sm text-gray-700">
+                      Salvar e exibir screenshot
+                    </label>
                   </div>
                 </div>
               ) : (
@@ -198,6 +231,27 @@ function App() {
         {results && (
           <div className="bg-white rounded-lg shadow-md p-6">
             <h2 className="text-2xl font-semibold text-gray-900 mb-4">Resultados</h2>
+            
+            {screenshot && (
+              <div className="mb-6">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-lg font-semibold text-gray-900">Screenshot</h3>
+                  <button
+                    onClick={downloadScreenshot}
+                    className="px-4 py-2 bg-green-600 text-white text-sm rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition duration-200"
+                  >
+                    Download
+                  </button>
+                </div>
+                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  <img 
+                    src={screenshot} 
+                    alt="Screenshot do site" 
+                    className="w-full h-auto max-h-96 object-contain"
+                  />
+                </div>
+              </div>
+            )}
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
               <div className="bg-blue-50 rounded-lg p-4">
