@@ -31,7 +31,7 @@ echo $FRONTEND_PID > ../logs/frontend.pid
 
 echo ""
 echo "Serviços iniciados!"
-echo "Python API: http://localhost:5000"
+echo "Python API: http://localhost:5001"
 echo "Backend: http://localhost:3001"
 echo "Frontend: http://localhost:5173"
 echo ""

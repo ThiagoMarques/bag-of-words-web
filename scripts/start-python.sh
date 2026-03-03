@@ -52,5 +52,5 @@ echo $PYTHON_PID > "$LOG_DIR/python.pid"
 
 echo "API Python iniciada (PID: $PYTHON_PID)"
 echo "Logs: $LOG_DIR/python.log"
-echo "API disponível em: http://localhost:5000"
+echo "API disponível em: http://localhost:5001"
 

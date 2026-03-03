@@ -10,7 +10,7 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
-const PYTHON_API_URL = process.env.PYTHON_API_URL || 'http://localhost:5000';
+const PYTHON_API_URL = process.env.PYTHON_API_URL || 'http://localhost:5001';
 
 // Middlewares
 app.use(cors());
