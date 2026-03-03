@@ -6,7 +6,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import axios from 'axios';
 import puppeteer from 'puppeteer';
-import { unlink } from 'fs/promises';
+import { unlink, readFile } from 'fs/promises';
 import { join } from 'path';
 
 dotenv.config();
@@ -51,7 +51,7 @@ app.post('/api/analyze-url', async (req, res) => {
   let screenshotPath = null;
 
   try {
-    const { url } = req.body;
+    const { url, saveScreenshot } = req.body;
 
     if (!url || typeof url !== 'string' || url.trim().length === 0) {
       return res.status(400).json({
@@ -100,7 +100,18 @@ app.post('/api/analyze-url', async (req, res) => {
     await browser.close();
     browser = null;
 
-    // Limpar screenshot temporário
+    // Processar screenshot
+    let screenshotBase64 = null;
+    if (saveScreenshot) {
+      try {
+        const screenshotBuffer = await readFile(screenshotPath);
+        screenshotBase64 = screenshotBuffer.toString('base64');
+      } catch (err) {
+        console.warn('Erro ao ler screenshot:', err.message);
+      }
+    }
+    
+    // Limpar screenshot temporário (sempre deletar após processar)
     try {
       await unlink(screenshotPath);
     } catch (err) {
@@ -112,11 +123,17 @@ app.post('/api/analyze-url', async (req, res) => {
       text: pageText
     });
 
-    res.json({
+    const responseData = {
       success: true,
       data: pythonResponse.data,
       url: url
-    });
+    };
+
+    if (screenshotBase64) {
+      responseData.screenshot = `data:image/png;base64,${screenshotBase64}`;
+    }
+
+    res.json(responseData);
 
   } catch (error) {
     console.error('Erro ao processar URL:', error.message);
