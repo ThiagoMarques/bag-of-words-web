@@ -1,15 +1,38 @@
 import { useState } from 'react'
 
 function App() {
+  const [mode, setMode] = useState('url') // 'url' ou 'text'
   const [url, setUrl] = useState('')
+  const [text, setText] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [results, setResults] = useState(null)
 
+  const validateUrl = (urlString) => {
+    try {
+      const urlObj = new URL(urlString)
+      return urlObj.protocol === 'http:' || urlObj.protocol === 'https:'
+    } catch {
+      return false
+    }
+  }
+
   const handleAnalyze = async () => {
-    if (!url.trim()) {
-      setError('Por favor, insira um texto para análise')
-      return
+    if (mode === 'url') {
+      if (!url.trim()) {
+        setError('Por favor, insira uma URL')
+        return
+      }
+      
+      if (!validateUrl(url.trim())) {
+        setError('URL inválida. Use http:// ou https://')
+        return
+      }
+    } else {
+      if (!text.trim()) {
+        setError('Por favor, insira um texto para análise')
+        return
+      }
     }
 
     setLoading(true)
@@ -17,12 +40,17 @@ function App() {
     setResults(null)
 
     try {
-      const response = await fetch('http://localhost:3001/api/analyze', {
+      const endpoint = mode === 'url' ? '/api/analyze-url' : '/api/analyze'
+      const body = mode === 'url' 
+        ? { url: url.trim() }
+        : { text: text.trim() }
+
+      const response = await fetch(`http://localhost:3001${endpoint}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ text: url.trim() })
+        body: JSON.stringify(body)
       })
 
       if (!response.ok) {
@@ -40,7 +68,7 @@ function App() {
   }
 
   const handleKeyPress = (e) => {
-    if (e.key === 'Enter' && !loading) {
+    if (e.key === 'Enter' && !loading && e.ctrlKey) {
       handleAnalyze()
     }
   }
@@ -58,34 +86,98 @@ function App() {
         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
           <div className="space-y-4">
             <div>
-              <label htmlFor="url" className="block text-sm font-medium text-gray-700 mb-2">
-                Texto para Análise
-              </label>
-              <p className="text-xs text-gray-500 mb-2">
-                Cole o texto ou digite uma URL 
-              </p>
-              <div className="flex gap-2">
-                <textarea
-                  id="url"
-                  value={url}
-                  onChange={(e) => {
-                    setUrl(e.target.value)
+              <div className="flex gap-2 mb-4">
+                <button
+                  onClick={() => {
+                    setMode('url')
                     setError(null)
                   }}
-                  onKeyPress={handleKeyPress}
-                  placeholder="Cole o texto aqui ou digite uma URL..."
-                  rows="4"
-                  className="flex-1 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                  disabled={loading}
-                />
-                <button
-                  onClick={handleAnalyze}
-                  disabled={loading || !url.trim()}
-                  className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition duration-200 self-start"
+                  className={`px-4 py-2 rounded-md font-medium transition duration-200 ${
+                    mode === 'url'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
                 >
-                  {loading ? 'Analisando...' : 'Analisar'}
+                  URL do Site
+                </button>
+                <button
+                  onClick={() => {
+                    setMode('text')
+                    setError(null)
+                  }}
+                  className={`px-4 py-2 rounded-md font-medium transition duration-200 ${
+                    mode === 'text'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  Texto Direto
                 </button>
               </div>
+
+              {mode === 'url' ? (
+                <div>
+                  <label htmlFor="url" className="block text-sm font-medium text-gray-700 mb-2">
+                    URL do Site
+                  </label>
+                  <p className="text-xs text-gray-500 mb-2">
+                    Digite a URL do site para fazer screenshot e análise
+                  </p>
+                  <div className="flex gap-2">
+                    <input
+                      id="url"
+                      type="text"
+                      value={url}
+                      onChange={(e) => {
+                        setUrl(e.target.value)
+                        setError(null)
+                      }}
+                      onKeyPress={handleKeyPress}
+                      placeholder="https://www.example.com"
+                      className="flex-1 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      disabled={loading}
+                    />
+                    <button
+                      onClick={handleAnalyze}
+                      disabled={loading || !url.trim()}
+                      className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition duration-200"
+                    >
+                      {loading ? 'Analisando...' : 'Analisar'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <label htmlFor="text" className="block text-sm font-medium text-gray-700 mb-2">
+                    Texto para Análise
+                  </label>
+                  <p className="text-xs text-gray-500 mb-2">
+                    Cole o texto diretamente para análise
+                  </p>
+                  <div className="flex gap-2">
+                    <textarea
+                      id="text"
+                      value={text}
+                      onChange={(e) => {
+                        setText(e.target.value)
+                        setError(null)
+                      }}
+                      onKeyPress={handleKeyPress}
+                      placeholder="Cole o texto aqui..."
+                      rows="4"
+                      className="flex-1 px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                      disabled={loading}
+                    />
+                    <button
+                      onClick={handleAnalyze}
+                      disabled={loading || !text.trim()}
+                      className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition duration-200 self-start"
+                    >
+                      {loading ? 'Analisando...' : 'Analisar'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             {error && (
