@@ -5,6 +5,9 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import axios from 'axios';
+import puppeteer from 'puppeteer';
+import { unlink } from 'fs/promises';
+import { join } from 'path';
 
 dotenv.config();
 
@@ -39,6 +42,113 @@ app.get('/health/python', async (req, res) => {
       message: 'API Python não está disponível',
       error: error.message
     });
+  }
+});
+
+// Rota para processar URL (screenshot + OCR + análise)
+app.post('/api/analyze-url', async (req, res) => {
+  let browser = null;
+  let screenshotPath = null;
+
+  try {
+    const { url } = req.body;
+
+    if (!url || typeof url !== 'string' || url.trim().length === 0) {
+      return res.status(400).json({
+        error: 'URL não fornecida ou inválida'
+      });
+    }
+
+    // Validar URL
+    let urlObj;
+    try {
+      urlObj = new URL(url);
+    } catch {
+      return res.status(400).json({
+        error: 'URL inválida'
+      });
+    }
+
+    // Fazer screenshot com Puppeteer
+    console.log(`Iniciando screenshot de: ${url}`);
+    browser = await puppeteer.launch({
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox']
+    });
+
+    const page = await browser.newPage();
+    await page.setViewport({ width: 1920, height: 1080 });
+    
+    // Navegar para a URL
+    await page.goto(url, { 
+      waitUntil: 'networkidle2',
+      timeout: 30000 
+    });
+
+    // Fazer screenshot
+    screenshotPath = join(process.cwd(), 'screenshots', `screenshot-${Date.now()}.png`);
+    await page.screenshot({ 
+      path: screenshotPath,
+      fullPage: true 
+    });
+
+    // Extrair texto da página
+    const pageText = await page.evaluate(() => {
+      return document.body.innerText;
+    });
+
+    await browser.close();
+    browser = null;
+
+    // Limpar screenshot temporário
+    try {
+      await unlink(screenshotPath);
+    } catch (err) {
+      console.warn('Erro ao remover screenshot:', err.message);
+    }
+
+    // Processar texto com Python API
+    const pythonResponse = await axios.post(`${PYTHON_API_URL}/api/process`, {
+      text: pageText
+    });
+
+    res.json({
+      success: true,
+      data: pythonResponse.data,
+      url: url
+    });
+
+  } catch (error) {
+    console.error('Erro ao processar URL:', error.message);
+    
+    // Limpar recursos
+    if (browser) {
+      await browser.close();
+    }
+    if (screenshotPath) {
+      try {
+        await unlink(screenshotPath);
+      } catch (err) {
+        // Ignorar erro de limpeza
+      }
+    }
+
+    if (error.message.includes('Navigation timeout')) {
+      res.status(408).json({
+        error: 'Timeout ao carregar a página',
+        message: 'A URL demorou muito para carregar'
+      });
+    } else if (error.message.includes('net::ERR')) {
+      res.status(400).json({
+        error: 'Erro ao acessar a URL',
+        message: 'Não foi possível acessar o site. Verifique se a URL está correta.'
+      });
+    } else {
+      res.status(500).json({
+        error: 'Erro interno do servidor',
+        message: error.message
+      });
+    }
   }
 });
 
@@ -95,7 +205,8 @@ app.get('/', (req, res) => {
     endpoints: {
       health: '/health',
       pythonHealth: '/health/python',
-      analyze: '/api/analyze (POST)'
+      analyze: '/api/analyze (POST) - Análise de texto direto',
+      analyzeUrl: '/api/analyze-url (POST) - Análise de URL (screenshot)'
     },
     python_api_url: PYTHON_API_URL
   });
