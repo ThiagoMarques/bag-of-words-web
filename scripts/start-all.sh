@@ -1,9 +1,14 @@
 #!/bin/bash
 
-# Script para iniciar frontend e backend em paralelo
+# Script para iniciar frontend, backend e Python API em paralelo
 cd "$(dirname "$0")/.."
 
-echo "Iniciando frontend e backend..."
+echo "Iniciando todos os serviços..."
+
+# Inicia Python API primeiro
+echo "Iniciando API Python..."
+./scripts/start-python.sh
+sleep 2
 
 # Inicia backend em background
 cd backend
@@ -26,11 +31,12 @@ echo $FRONTEND_PID > ../logs/frontend.pid
 
 echo ""
 echo "Serviços iniciados!"
+echo "Python API: http://localhost:5000"
 echo "Backend: http://localhost:3001"
 echo "Frontend: http://localhost:5173"
 echo ""
 echo "Para parar, execute: ./scripts/stop-all.sh"
-echo "Logs em: logs/backend.log e logs/frontend.log"
+echo "Logs em: logs/"
 
 # Mantém o script rodando
 wait

@@ -1,9 +1,12 @@
 #!/bin/bash
 
-# Script para parar frontend e backend
+# Script para parar frontend, backend e Python API
 cd "$(dirname "$0")/.."
 
 echo "Parando todos os serviços..."
+
+# Para Python API
+./scripts/stop-python.sh
 
 # Para backend
 if [ -f logs/backend.pid ]; then
