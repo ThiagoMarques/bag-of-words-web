@@ -6,6 +6,8 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import axios from 'axios';
 import puppeteer from 'puppeteer';
+import vision from '@google-cloud/vision';
+import sharp from 'sharp';
 import { unlink, readFile } from 'fs/promises';
 import { join } from 'path';
 
@@ -14,6 +16,28 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3001;
 const PYTHON_API_URL = process.env.PYTHON_API_URL || 'http://localhost:5001';
+const OCR_LANGUAGE = process.env.OCR_LANGUAGE || 'pt'; 
+
+// Configurar Google Cloud Vision API
+let visionClient = null;
+const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY;
+const GOOGLE_APPLICATION_CREDENTIALS = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+
+if (GOOGLE_APPLICATION_CREDENTIALS) {
+  // Usar service account (recomendado para produção)
+  visionClient = new vision.ImageAnnotatorClient({
+    keyFilename: GOOGLE_APPLICATION_CREDENTIALS
+  });
+  console.log('Google Cloud Vision configurado com service account');
+} else if (GOOGLE_API_KEY) {
+  // Usar API key (mais simples, mas menos seguro)
+  visionClient = new vision.ImageAnnotatorClient({
+    apiKey: GOOGLE_API_KEY
+  });
+  console.log('Google Cloud Vision configurado com API key');
+} else {
+  console.warn('Google Cloud Vision não configurado. Configure GOOGLE_API_KEY ou GOOGLE_APPLICATION_CREDENTIALS');
+}
 
 // Middlewares
 app.use(cors());
@@ -49,6 +73,7 @@ app.get('/health/python', async (req, res) => {
 app.post('/api/analyze-url', async (req, res) => {
   let browser = null;
   let screenshotPath = null;
+  let processedImagePath = null;
 
   try {
     const { url, saveScreenshot } = req.body;
@@ -92,15 +117,85 @@ app.post('/api/analyze-url', async (req, res) => {
       fullPage: true 
     });
 
-    // Extrair texto da página
-    const pageText = await page.evaluate(() => {
-      return document.body.innerText;
-    });
-
     await browser.close();
     browser = null;
 
-    // Processar screenshot
+    // Pré-processar imagem para melhorar precisão do OCR
+    console.log('Pré-processando imagem para OCR...');
+    processedImagePath = join(process.cwd(), 'screenshots', `processed-${Date.now()}.png`);
+    
+    // Obter dimensões da imagem original
+    const metadata = await sharp(screenshotPath).metadata();
+    const currentWidth = metadata.width || 1920;
+    
+    // Para OCR, ideal é ~300 DPI. Se a imagem for muito pequena, aumentamos
+    // Mas não aumentamos se já for grande o suficiente (evita perda de qualidade)
+    const minWidthForOCR = 2000; // ~200 DPI mínimo para boa qualidade OCR
+    const targetWidth = currentWidth < minWidthForOCR ? minWidthForOCR : currentWidth;
+    
+    await sharp(screenshotPath)
+      .grayscale() // Converter para preto e branco
+      .normalize() // Aumentar contraste
+      .sharpen() // Aumentar nitidez
+      .resize(targetWidth, null, {
+        withoutEnlargement: currentWidth >= minWidthForOCR,
+        kernel: sharp.kernel.lanczos3
+      })
+      .png({ quality: 100 })
+      .toFile(processedImagePath);
+    
+    console.log(`Imagem processada: ${currentWidth}px -> ${targetWidth}px`);
+
+    // Extrair texto usando Google Cloud Vision API
+    console.log('Iniciando OCR com Google Cloud Vision...');
+    
+    if (!visionClient) {
+      throw new Error('Google Cloud Vision não está configurado. Configure GOOGLE_API_KEY ou GOOGLE_APPLICATION_CREDENTIALS');
+    }
+
+    // Ler imagem processada como buffer
+    const imageBuffer = await readFile(processedImagePath);
+    
+    let pageText = '';
+    
+    try {
+      // Fazer requisição para Cloud Vision API
+      const imageContext = {
+        languageHints: [OCR_LANGUAGE] 
+      };
+      
+      const [result] = await visionClient.textDetection({
+        image: { content: imageBuffer },
+        imageContext: imageContext
+      });
+
+      // Extrair texto dos resultados
+      const detections = result.textAnnotations;
+      console.log(detections);
+      
+      if (detections && detections.length > 0) {
+        // O primeiro elemento contém todo o texto detectado
+        pageText = detections[0].description || '';
+      }
+      
+      console.log(`Google Cloud Vision extraiu ${pageText.length} caracteres`);
+      
+      if (!pageText || pageText.trim().length === 0) {
+        console.warn('Nenhum texto detectado na imagem');
+        pageText = '';
+      }
+    } catch (visionError) {
+      // Tratamento específico de erros do Google Cloud Vision
+      if (visionError.code === 8 || visionError.message?.includes('RESOURCE_EXHAUSTED')) {
+        throw new Error('Limite de cota do Google Cloud Vision atingido. Tente novamente mais tarde.');
+      } else if (visionError.code === 7 || visionError.message?.includes('PERMISSION_DENIED')) {
+        throw new Error('Permissão negada. Verifique suas credenciais do Google Cloud Vision.');
+      } else {
+        throw new Error(`Erro no Google Cloud Vision: ${visionError.message}`);
+      }
+    }
+    
+    // Processar screenshot para retornar se solicitado
     let screenshotBase64 = null;
     if (saveScreenshot) {
       try {
@@ -111,11 +206,14 @@ app.post('/api/analyze-url', async (req, res) => {
       }
     }
     
-    // Limpar screenshot temporário (sempre deletar após processar)
+    // Limpar arquivos temporários (sempre deletar após processar)
     try {
       await unlink(screenshotPath);
+      if (processedImagePath) {
+        await unlink(processedImagePath);
+      }
     } catch (err) {
-      console.warn('Erro ao remover screenshot:', err.message);
+      console.warn('Erro ao remover arquivos temporários:', err.message);
     }
 
     // Processar texto com Python API
@@ -149,7 +247,15 @@ app.post('/api/analyze-url', async (req, res) => {
         // Ignorar erro de limpeza
       }
     }
+    if (processedImagePath) {
+      try {
+        await unlink(processedImagePath);
+      } catch (err) {
+        // Ignorar erro de limpeza
+      }
+    }
 
+    // Tratamento específico de erros
     if (error.message.includes('Navigation timeout')) {
       res.status(408).json({
         error: 'Timeout ao carregar a página',
@@ -159,6 +265,22 @@ app.post('/api/analyze-url', async (req, res) => {
       res.status(400).json({
         error: 'Erro ao acessar a URL',
         message: 'Não foi possível acessar o site. Verifique se a URL está correta.'
+      });
+    } else if (error.message.includes('quota') || error.message.includes('Limite de cota')) {
+      res.status(429).json({
+        error: 'Limite de cota atingido',
+        message: 'O limite de requisições do Google Cloud Vision foi atingido. Tente novamente mais tarde.',
+        retryAfter: 60 // segundos
+      });
+    } else if (error.message.includes('Google Cloud Vision não está configurado')) {
+      res.status(503).json({
+        error: 'Serviço não configurado',
+        message: 'Google Cloud Vision não está configurado. Configure GOOGLE_API_KEY ou GOOGLE_APPLICATION_CREDENTIALS no arquivo .env'
+      });
+    } else if (error.code === 7 || error.message.includes('PERMISSION_DENIED')) {
+      res.status(403).json({
+        error: 'Permissão negada',
+        message: 'Credenciais do Google Cloud Vision inválidas ou sem permissão. Verifique suas credenciais.'
       });
     } else {
       res.status(500).json({
