@@ -2,9 +2,61 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import re
 from collections import Counter
+from wordcloud import WordCloud
+import base64
+import io
 
 app = Flask(__name__)
 CORS(app)
+
+def process_bag_of_words(text):
+    """
+    Processa texto e retorna contagem de palavras (Bag of Words)
+    """
+    # Converter para minúsculas
+    text = text.lower()
+    
+    # Remover pontuação e caracteres especiais
+    text = re.sub(r'[^\w\s]', ' ', text)
+    
+    # Dividir em palavras
+    words = text.split()
+    
+    # Filtrar palavras muito curtas (menos de 3 caracteres)
+    words = [w for w in words if len(w) > 2]
+    
+    # Contar frequência das palavras
+    word_count = Counter(words)
+    
+    return word_count
+
+def generate_wordcloud_data(text):
+    """
+    Gera dados para Word Cloud seguindo os exemplos do curso
+    Retorna: lista de palavras com frequências formatadas para Word Cloud
+    """
+    word_count = process_bag_of_words(text)
+    
+    # Criar string com todas as palavras repetidas pela frequência
+    # Isso é o que o WordCloud precisa
+    todas_palavras = ' '.join([palavra for palavra, freq in word_count.items() for _ in range(freq)])
+    
+    # Gerar Word Cloud (seguindo exemplo do curso)
+    wordcloud = WordCloud(
+        width=800,
+        height=500,
+        max_font_size=110,
+        collocations=False,  # Remove n-grams, mostra apenas palavras únicas
+        background_color='white'
+    ).generate(todas_palavras)
+    
+    # Converter imagem para base64 para enviar ao frontend
+    img_buffer = io.BytesIO()
+    wordcloud.to_image().save(img_buffer, format='PNG')
+    img_buffer.seek(0)
+    img_base64 = base64.b64encode(img_buffer.read()).decode('utf-8')
+    
+    return img_base64
 
 @app.route('/health', methods=['GET'])
 def health():
@@ -21,21 +73,23 @@ def process_text():
         if not text or len(text.strip()) == 0:
             return jsonify({'error': 'Texto vazio'}), 400
         
-        text = text.lower()
-        text = re.sub(r'[^\w\s]', ' ', text)
-        words = text.split()
-        words = [w for w in words if len(w) > 2]
-        word_count = Counter(words)
+        # Processar Bag of Words
+        word_count = process_bag_of_words(text)
         
+        # Preparar resultado das top palavras
         result = [
             {'palavra': word, 'frequencia': count}
             for word, count in word_count.most_common(100)
         ]
         
+        # Gerar Word Cloud
+        wordcloud_image = generate_wordcloud_data(text)
+        
         return jsonify({
-            'total_palavras': len(words),
+            'total_palavras': sum(word_count.values()),
             'palavras_unicas': len(word_count),
-            'top_palavras': result
+            'top_palavras': result,
+            'wordcloud': f'data:image/png;base64,{wordcloud_image}'
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
