@@ -32,31 +32,43 @@ def process_bag_of_words(text):
 
 def generate_wordcloud_data(text):
     """
-    Gera dados para Word Cloud seguindo os exemplos do curso
-    Retorna: lista de palavras com frequências formatadas para Word Cloud
+    Gera dados para Word Cloud
+    Retorna: imagem em base64 ou None se não houver palavras suficientes
     """
     word_count = process_bag_of_words(text)
+    
+    # Verificar se há palavras suficientes
+    if len(word_count) == 0:
+        return None
     
     # Criar string com todas as palavras repetidas pela frequência
     # Isso é o que o WordCloud precisa
     todas_palavras = ' '.join([palavra for palavra, freq in word_count.items() for _ in range(freq)])
     
-    # Gerar Word Cloud (seguindo exemplo do curso)
-    wordcloud = WordCloud(
-        width=800,
-        height=500,
-        max_font_size=110,
-        collocations=False,  # Remove n-grams, mostra apenas palavras únicas
-        background_color='white'
-    ).generate(todas_palavras)
+    # Verificar se a string não está vazia
+    if not todas_palavras or len(todas_palavras.strip()) == 0:
+        return None
     
-    # Converter imagem para base64 para enviar ao frontend
-    img_buffer = io.BytesIO()
-    wordcloud.to_image().save(img_buffer, format='PNG')
-    img_buffer.seek(0)
-    img_base64 = base64.b64encode(img_buffer.read()).decode('utf-8')
-    
-    return img_base64
+    try:
+        # Gerar Word Cloud
+        wordcloud = WordCloud(
+            width=800,
+            height=500,
+            max_font_size=110,
+            collocations=False,  # Remove n-grams, mostra apenas palavras únicas
+            background_color='white'
+        ).generate(todas_palavras)
+        
+        # Converter imagem para base64 para enviar ao frontend
+        img_buffer = io.BytesIO()
+        wordcloud.to_image().save(img_buffer, format='PNG')
+        img_buffer.seek(0)
+        img_base64 = base64.b64encode(img_buffer.read()).decode('utf-8')
+        
+        return img_base64
+    except Exception as e:
+        print(f"Erro ao gerar Word Cloud: {e}")
+        return None
 
 @app.route('/health', methods=['GET'])
 def health():
@@ -85,12 +97,17 @@ def process_text():
         # Gerar Word Cloud
         wordcloud_image = generate_wordcloud_data(text)
         
-        return jsonify({
+        response_data = {
             'total_palavras': sum(word_count.values()),
             'palavras_unicas': len(word_count),
-            'top_palavras': result,
-            'wordcloud': f'data:image/png;base64,{wordcloud_image}'
-        })
+            'top_palavras': result
+        }
+        
+        # Adicionar Word Cloud apenas se foi gerada com sucesso
+        if wordcloud_image:
+            response_data['wordcloud'] = f'data:image/png;base64,{wordcloud_image}'
+        
+        return jsonify(response_data)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
