@@ -5,6 +5,7 @@ function App() {
   const [url, setUrl] = useState('')
   const [text, setText] = useState('')
   const [saveScreenshot, setSaveScreenshot] = useState(false)
+  const [ignoreHeaderFooter, setIgnoreHeaderFooter] = useState(true)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [results, setResults] = useState(null)
@@ -45,7 +46,7 @@ function App() {
     try {
       const endpoint = mode === 'url' ? '/api/analyze-url' : '/api/analyze'
       const body = mode === 'url' 
-        ? { url: url.trim(), saveScreenshot }
+        ? { url: url.trim(), saveScreenshot, ignoreHeaderFooter }
         : { text: text.trim() }
 
       const response = await fetch(`http://localhost:3001${endpoint}`, {
@@ -165,18 +166,33 @@ function App() {
                       {loading ? 'Analisando...' : 'Analisar'}
                     </button>
                   </div>
-                  <div className="flex items-center">
-                    <input
-                      id="saveScreenshot"
-                      type="checkbox"
-                      checked={saveScreenshot}
-                      onChange={(e) => setSaveScreenshot(e.target.checked)}
-                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                      disabled={loading}
-                    />
-                    <label htmlFor="saveScreenshot" className="ml-2 text-sm text-gray-700">
-                      Salvar e exibir screenshot
-                    </label>
+                  <div className="space-y-2">
+                    <div className="flex items-center">
+                      <input
+                        id="saveScreenshot"
+                        type="checkbox"
+                        checked={saveScreenshot}
+                        onChange={(e) => setSaveScreenshot(e.target.checked)}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                        disabled={loading}
+                      />
+                      <label htmlFor="saveScreenshot" className="ml-2 text-sm text-gray-700">
+                        Salvar e exibir screenshot
+                      </label>
+                    </div>
+                    <div className="flex items-center">
+                      <input
+                        id="ignoreHeaderFooter"
+                        type="checkbox"
+                        checked={ignoreHeaderFooter}
+                        onChange={(e) => setIgnoreHeaderFooter(e.target.checked)}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                        disabled={loading}
+                      />
+                      <label htmlFor="ignoreHeaderFooter" className="ml-2 text-sm text-gray-700">
+                        Ignorar header e footer na análise
+                      </label>
+                    </div>
                   </div>
                 </div>
               ) : (
