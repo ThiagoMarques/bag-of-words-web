@@ -21,22 +21,14 @@ const OCR_LANGUAGE = process.env.OCR_LANGUAGE || 'pt';
 // Configurar Google Cloud Vision API
 let visionClient = null;
 const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY;
-const GOOGLE_APPLICATION_CREDENTIALS = process.env.GOOGLE_APPLICATION_CREDENTIALS;
 
-if (GOOGLE_APPLICATION_CREDENTIALS) {
-  // Usar service account (recomendado para produção)
-  visionClient = new vision.ImageAnnotatorClient({
-    keyFilename: GOOGLE_APPLICATION_CREDENTIALS
-  });
-  console.log('Google Cloud Vision configurado com service account');
-} else if (GOOGLE_API_KEY) {
-  // Usar API key (mais simples, mas menos seguro)
+if (GOOGLE_API_KEY) {
   visionClient = new vision.ImageAnnotatorClient({
     apiKey: GOOGLE_API_KEY
   });
   console.log('Google Cloud Vision configurado com API key');
 } else {
-  console.warn('Google Cloud Vision não configurado. Configure GOOGLE_API_KEY ou GOOGLE_APPLICATION_CREDENTIALS');
+  console.warn('Google Cloud Vision não configurado. Configure GOOGLE_API_KEY no arquivo .env');
 }
 
 // Middlewares
@@ -150,7 +142,7 @@ app.post('/api/analyze-url', async (req, res) => {
     console.log('Iniciando OCR com Google Cloud Vision...');
     
     if (!visionClient) {
-      throw new Error('Google Cloud Vision não está configurado. Configure GOOGLE_API_KEY ou GOOGLE_APPLICATION_CREDENTIALS');
+      throw new Error('Configure GOOGLE_API_KEY no arquivo .env');
     }
 
     // Ler imagem processada como buffer
@@ -206,7 +198,7 @@ app.post('/api/analyze-url', async (req, res) => {
       }
     }
     
-    // Limpar arquivos temporários (sempre deletar após processar)
+    // Limpar arquivos temporários
     try {
       await unlink(screenshotPath);
       if (processedImagePath) {
@@ -244,14 +236,14 @@ app.post('/api/analyze-url', async (req, res) => {
       try {
         await unlink(screenshotPath);
       } catch (err) {
-        // Ignorar erro de limpeza
+        console.log('Erro ao limpar screenshot:', err);
       }
     }
     if (processedImagePath) {
       try {
         await unlink(processedImagePath);
       } catch (err) {
-        // Ignorar erro de limpeza
+        console.log('Erro ao limpar imagem processada:', err);
       }
     }
 
@@ -275,7 +267,7 @@ app.post('/api/analyze-url', async (req, res) => {
     } else if (error.message.includes('Google Cloud Vision não está configurado')) {
       res.status(503).json({
         error: 'Serviço não configurado',
-        message: 'Google Cloud Vision não está configurado. Configure GOOGLE_API_KEY ou GOOGLE_APPLICATION_CREDENTIALS no arquivo .env'
+        message: 'Configure GOOGLE_API_KEY no arquivo .env'
       });
     } else if (error.code === 7 || error.message.includes('PERMISSION_DENIED')) {
       res.status(403).json({
@@ -340,7 +332,7 @@ app.post('/api/analyze', async (req, res) => {
 app.get('/', (req, res) => {
   res.json({ 
     message: 'Bag of Words API - Análise de Texto',
-    version: '1.0.0',
+    version: '1.0.2',
     endpoints: {
       health: '/health',
       pythonHealth: '/health/python',
