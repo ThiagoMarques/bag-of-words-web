@@ -268,6 +268,24 @@ function App() {
                 </div>
               </div>
             )}
+
+            {results.wordcloud && (
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-3">Nuvem de Palavras</h3>
+                <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                  <div className="flex justify-center">
+                    <img 
+                      src={results.wordcloud} 
+                      alt="Nuvem de palavras" 
+                      className="max-w-full h-auto rounded-lg shadow-sm"
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500 mt-3 text-center">
+                    As palavras maiores aparecem com mais frequência no texto analisado
+                  </p>
+                </div>
+              </div>
+            )}
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
               <div className="bg-blue-50 rounded-lg p-4">
