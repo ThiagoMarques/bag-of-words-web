@@ -298,6 +298,43 @@ function App() {
               </div>
             </div>
 
+            {results.preprocessing && results.preprocessing.estatisticas && (
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-3">Estatísticas de Pré-processamento</h3>
+                <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div>
+                      <p className="text-xs text-gray-600 mb-1">Palavras Originais</p>
+                      <p className="text-lg font-semibold text-purple-700">
+                        {results.preprocessing.estatisticas.total_palavras_original || 0}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-600 mb-1">Após Processamento</p>
+                      <p className="text-lg font-semibold text-purple-700">
+                        {results.preprocessing.estatisticas.total_palavras_processadas || 0}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-600 mb-1">Stop Words Removidas</p>
+                      <p className="text-lg font-semibold text-red-600">
+                        {results.preprocessing.estatisticas.stopwords_removidas || 0}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-600 mb-1">Redução</p>
+                      <p className="text-lg font-semibold text-orange-600">
+                        {results.preprocessing.estatisticas.reducao_percentual || 0}%
+                      </p>
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-3">
+                    Pré-processamento sempre ativo: tokenização, remoção de stop words, pontuação e acentos
+                  </p>
+                </div>
+              </div>
+            )}
+
             {results.top_palavras && results.top_palavras.length > 0 && (
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-3">Top Palavras</h3>
