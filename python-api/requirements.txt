@@ -3,4 +3,6 @@ flask-cors==4.0.0
 wordcloud
 matplotlib
 numpy
+nltk
+unidecode
 
