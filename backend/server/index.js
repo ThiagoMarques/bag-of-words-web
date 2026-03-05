@@ -313,12 +313,12 @@ app.post('/api/analyze', async (req, res) => {
         error: 'Erro ao processar texto',
         details: error.response.data
       });
-    } else if (error.code === 'ECONNREFUSED') {
-      // API Python não está rodando
-      res.status(503).json({
-        error: 'API Python não está disponível',
-        message: 'Certifique-se de que a API Python está rodando na porta 5000'
-      });
+          } else if (error.code === 'ECONNREFUSED') {
+            // API Python não está rodando
+            res.status(503).json({
+              error: 'API Python não está disponível',
+              message: `Certifique-se de que a API Python está rodando em ${PYTHON_API_URL}`
+            });
     } else {
       res.status(500).json({
         error: 'Erro interno do servidor',
