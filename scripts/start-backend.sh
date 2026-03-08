@@ -6,3 +6,4 @@ cd "$(dirname "$0")/../backend"
 echo "Iniciando backend..."
 npm run dev
 
+
