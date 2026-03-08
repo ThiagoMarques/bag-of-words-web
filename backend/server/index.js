@@ -99,8 +99,13 @@ app.post('/api/analyze-url', async (req, res) => {
     // Navegar para a URL
     await page.goto(url, { 
       waitUntil: 'networkidle2',
-      timeout: 30000 
+      timeout: 60000  // Aumentado de 30s para 60s
     });
+
+    // Aguardar tempo adicional para garantir carregamento completo
+    // Útil para páginas com conteúdo dinâmico, lazy loading, etc.
+    // Usando Promise com setTimeout (compatível com versões mais recentes do Puppeteer)
+    await new Promise(resolve => setTimeout(resolve, 3000)); // Aguarda 3 segundos adicionais
 
     // Fazer screenshot
     screenshotPath = join(process.cwd(), 'screenshots', `screenshot-${Date.now()}.png`);
@@ -209,9 +214,28 @@ app.post('/api/analyze-url', async (req, res) => {
     }
 
     // Processar texto com Python API
-    const pythonResponse = await axios.post(`${PYTHON_API_URL}/api/process`, {
-      text: pageText
-    });
+    // Passar parâmetros de processamento (com valores padrão se não fornecidos)
+    let pythonResponse;
+    try {
+      pythonResponse = await axios.post(`${PYTHON_API_URL}/api/process`, {
+        text: pageText,
+        use_stemming: req.body.use_stemming !== undefined ? req.body.use_stemming : true,
+        use_tfidf: req.body.use_tfidf !== undefined ? req.body.use_tfidf : false,
+        use_ngrams: req.body.use_ngrams !== undefined ? req.body.use_ngrams : true
+      }, {
+        timeout: 30000 // 30 segundos de timeout
+      });
+    } catch (pythonError) {
+      // Erro específico da API Python
+      if (pythonError.code === 'ECONNREFUSED' || pythonError.code === 'ETIMEDOUT') {
+        throw new Error(`API Python não está disponível em ${PYTHON_API_URL}. Certifique-se de que está rodando.`);
+      } else if (pythonError.response) {
+        // Erro retornado pela API Python
+        throw pythonError;
+      } else {
+        throw new Error(`Erro ao conectar com API Python: ${pythonError.message}`);
+      }
+    }
 
     const responseData = {
       success: true,
@@ -227,6 +251,7 @@ app.post('/api/analyze-url', async (req, res) => {
 
   } catch (error) {
     console.error('Erro ao processar URL:', error.message);
+    console.error('Stack trace:', error.stack);
     
     // Limpar recursos
     if (browser) {
@@ -245,6 +270,11 @@ app.post('/api/analyze-url', async (req, res) => {
       } catch (err) {
         console.log('Erro ao limpar imagem processada:', err);
       }
+    }
+    
+    // Verificar se é erro da API Python
+    if (error.response && error.response.data) {
+      console.error('Erro da API Python:', error.response.data);
     }
 
     // Tratamento específico de erros
@@ -274,10 +304,32 @@ app.post('/api/analyze-url', async (req, res) => {
         error: 'Permissão negada',
         message: 'Credenciais do Google Cloud Vision inválidas ou sem permissão. Verifique suas credenciais.'
       });
+    } else if (error.message.includes('API Python não está disponível') || error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
+      // API Python não está rodando
+      res.status(503).json({
+        error: 'API Python não está disponível',
+        message: error.message || `Certifique-se de que a API Python está rodando em ${PYTHON_API_URL}`,
+        python_api_url: PYTHON_API_URL
+      });
+    } else if (error.response && error.response.status === 503) {
+      // Erro da API Python (não disponível)
+      res.status(503).json({
+        error: 'API Python não está disponível',
+        message: error.response.data?.message || error.message,
+        details: error.response.data
+      });
+    } else if (error.response && error.response.data) {
+      // Erro retornado pela API Python
+      res.status(error.response.status || 500).json({
+        error: 'Erro ao processar texto',
+        message: error.response.data.error || error.response.data.message || error.message,
+        details: error.response.data
+      });
     } else {
       res.status(500).json({
         error: 'Erro interno do servidor',
-        message: error.message
+        message: error.message || 'Erro desconhecido',
+        code: error.code || undefined
       });
     }
   }
@@ -295,8 +347,12 @@ app.post('/api/analyze', async (req, res) => {
     }
 
     // Chamar API Python para processar
+    // Passar parâmetros de processamento (com valores padrão se não fornecidos)
     const pythonResponse = await axios.post(`${PYTHON_API_URL}/api/process`, {
-      text: text
+      text: text,
+      use_stemming: req.body.use_stemming !== undefined ? req.body.use_stemming : true,
+      use_tfidf: req.body.use_tfidf !== undefined ? req.body.use_tfidf : false,
+      use_ngrams: req.body.use_ngrams !== undefined ? req.body.use_ngrams : true
     });
 
     res.json({
@@ -306,23 +362,26 @@ app.post('/api/analyze', async (req, res) => {
 
   } catch (error) {
     console.error('Erro ao processar texto:', error.message);
+    console.error('Stack trace:', error.stack);
     
     if (error.response) {
       // Erro da API Python
-      res.status(error.response.status).json({
+      const statusCode = error.response.status || 500;
+      res.status(statusCode).json({
         error: 'Erro ao processar texto',
+        message: error.response.data?.error || error.response.data?.message || error.message,
         details: error.response.data
       });
-          } else if (error.code === 'ECONNREFUSED') {
-            // API Python não está rodando
-            res.status(503).json({
-              error: 'API Python não está disponível',
-              message: `Certifique-se de que a API Python está rodando em ${PYTHON_API_URL}`
-            });
+    } else if (error.code === 'ECONNREFUSED') {
+      // API Python não está rodando
+      res.status(503).json({
+        error: 'API Python não está disponível',
+        message: `Certifique-se de que a API Python está rodando em ${PYTHON_API_URL}`
+      });
     } else {
       res.status(500).json({
         error: 'Erro interno do servidor',
-        message: error.message
+        message: error.message || 'Erro desconhecido'
       });
     }
   }
