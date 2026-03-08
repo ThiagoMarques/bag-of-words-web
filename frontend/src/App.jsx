@@ -6,6 +6,9 @@ function App() {
   const [text, setText] = useState('')
   const [saveScreenshot, setSaveScreenshot] = useState(false)
   const [ignoreHeaderFooter, setIgnoreHeaderFooter] = useState(true)
+  const [useStemming, setUseStemming] = useState(true) // Stemming com RSLP (padrão: ativo)
+  const [useTfidf, setUseTfidf] = useState(false) // TF-IDF (padrão: Bag of Words)
+  const [useNgrams, setUseNgrams] = useState(true) // N-grams (padrão: ativo quando TF-IDF)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [results, setResults] = useState(null)
@@ -46,8 +49,20 @@ function App() {
     try {
       const endpoint = mode === 'url' ? '/api/analyze-url' : '/api/analyze'
       const body = mode === 'url' 
-        ? { url: url.trim(), saveScreenshot, ignoreHeaderFooter }
-        : { text: text.trim() }
+        ? { 
+            url: url.trim(), 
+            saveScreenshot, 
+            ignoreHeaderFooter,
+            use_stemming: useStemming,
+            use_tfidf: useTfidf,
+            use_ngrams: useNgrams
+          }
+        : { 
+            text: text.trim(),
+            use_stemming: useStemming,
+            use_tfidf: useTfidf,
+            use_ngrams: useNgrams
+          }
 
       const response = await fetch(`http://localhost:3001${endpoint}`, {
         method: 'POST',
@@ -227,6 +242,62 @@ function App() {
                   </div>
                 </div>
               )}
+              
+              {/* Opções avançadas de processamento */}
+              <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                <h3 className="text-sm font-semibold text-gray-900 mb-3">Opções de Processamento</h3>
+                <div className="space-y-2">
+                  <div className="flex items-center">
+                    <input
+                      id="useStemming"
+                      type="checkbox"
+                      checked={useStemming}
+                      onChange={(e) => setUseStemming(e.target.checked)}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                      disabled={loading}
+                    />
+                    <label htmlFor="useStemming" className="ml-2 text-sm text-gray-700">
+                      <strong>Stemming (RSLP)</strong> - Reduz palavras a radicais comuns
+                    </label>
+                  </div>
+                  <div className="flex items-center">
+                    <input
+                      id="useTfidf"
+                      type="checkbox"
+                      checked={useTfidf}
+                      onChange={(e) => {
+                        setUseTfidf(e.target.checked)
+                        if (!e.target.checked) {
+                          setUseNgrams(false) // Desativar N-grams se TF-IDF estiver desativado
+                        }
+                      }}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                      disabled={loading}
+                    />
+                    <label htmlFor="useTfidf" className="ml-2 text-sm text-gray-700">
+                      <strong>TF-IDF</strong> - Usa pesos ao invés de frequência simples (Bag of Words)
+                    </label>
+                  </div>
+                  <div className="flex items-center">
+                    <input
+                      id="useNgrams"
+                      type="checkbox"
+                      checked={useNgrams}
+                      onChange={(e) => setUseNgrams(e.target.checked)}
+                      disabled={loading || !useTfidf}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded disabled:opacity-50"
+                    />
+                    <label htmlFor="useNgrams" className={`ml-2 text-sm ${!useTfidf ? 'text-gray-400' : 'text-gray-700'}`}>
+                      <strong>N-grams</strong> - Captura sequências de palavras (requer TF-IDF)
+                    </label>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500 mt-2">
+                  {useTfidf 
+                    ? 'Usando TF-IDF com ' + (useNgrams ? 'N-grams (unigramas + bigramas)' : 'apenas unigramas')
+                    : 'Usando Bag of Words (contagem de frequência)'}
+                </p>
+              </div>
             </div>
 
             {error && (
@@ -298,6 +369,18 @@ function App() {
               </div>
             </div>
 
+            {/* Informações sobre método usado */}
+            {results.metodo && (
+              <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                <p className="text-sm text-blue-800">
+                  <strong>Método:</strong> {results.metodo}
+                  {results.preprocessing?.stemming && ' + Stemming (RSLP)'}
+                  {results.preprocessing?.tfidf && ' + TF-IDF'}
+                  {results.preprocessing?.ngrams && ' + N-grams'}
+                </p>
+              </div>
+            )}
+
             {results.preprocessing && results.preprocessing.estatisticas && (
               <div className="mb-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-3">Estatísticas de Pré-processamento</h3>
@@ -328,16 +411,25 @@ function App() {
                       </p>
                     </div>
                   </div>
-                  <p className="text-xs text-gray-500 mt-3">
-                    Pré-processamento sempre ativo: tokenização, remoção de stop words, pontuação e acentos
-                  </p>
+                  <div className="mt-3 text-xs text-gray-600">
+                    <p><strong>Técnicas aplicadas:</strong></p>
+                    <ul className="list-disc list-inside mt-1">
+                      <li>Tokenização com WordPunctTokenizer</li>
+                      <li>Remoção de stop words, pontuação e acentos</li>
+                      {results.preprocessing.stemming && <li>Stemming com RSLP (normalização morfológica)</li>}
+                      {results.preprocessing.tfidf && <li>TF-IDF (pesos normalizados)</li>}
+                      {results.preprocessing.ngrams && <li>N-grams (captura de contexto)</li>}
+                    </ul>
+                  </div>
                 </div>
               </div>
             )}
 
             {results.top_palavras && results.top_palavras.length > 0 && (
               <div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-3">Top Palavras</h3>
+                <h3 className="text-lg font-semibold text-gray-900 mb-3">
+                  {results.metodo === 'TF-IDF' ? 'Top Palavras (por Peso TF-IDF)' : 'Top Palavras (por Frequência)'}
+                </h3>
                 <div className="overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
@@ -346,7 +438,7 @@ function App() {
                           Palavra
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Frequência
+                          {results.metodo === 'TF-IDF' ? 'Peso TF-IDF' : 'Frequência'}
                         </th>
                       </tr>
                     </thead>
@@ -357,13 +449,20 @@ function App() {
                             {item.palavra}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {item.frequencia}
+                            {results.metodo === 'TF-IDF' 
+                              ? item.peso?.toFixed(4) || item.frequencia
+                              : item.frequencia}
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
+                {results.metodo === 'TF-IDF' && (
+                  <p className="text-xs text-gray-500 mt-2">
+                    Valores TF-IDF normalizados entre 0 e 1. Valores maiores indicam palavras mais relevantes.
+                  </p>
+                )}
               </div>
             )}
           </div>
